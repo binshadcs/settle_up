@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus, ChevronDown, Delete } from 'lucide-react';
-import { 
-  Friend, 
-  getFriends, 
-  addFriend, 
-  addExpense, 
-  getRandomEmoji 
+import {
+  Friend,
+  getFriends,
+  addFriend,
+  addExpense,
+  getRandomEmoji
 } from '@/lib/storage';
 
 interface QuickAddDrawerProps {
@@ -50,14 +50,14 @@ const QuickAddDrawer = ({ isOpen, onClose, onExpenseAdded }: QuickAddDrawerProps
 
   const handleSubmit = () => {
     if (!amount || !selectedFriend) return;
-    
+
     addExpense({
       amount: parseFloat(amount),
       friendId: selectedFriend.id,
       purpose: purpose || 'Expense',
       tags: [],
     });
-    
+
     onExpenseAdded();
     onClose();
   };
@@ -120,7 +120,7 @@ const QuickAddDrawer = ({ isOpen, onClose, onExpenseAdded }: QuickAddDrawerProps
                   key={s}
                   className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
                     s <= step ? 'bg-primary' : 'bg-muted'
-                  }`}
+                    }`}
                 />
               ))}
             </div>
@@ -163,7 +163,7 @@ const QuickAddDrawer = ({ isOpen, onClose, onExpenseAdded }: QuickAddDrawerProps
                             key === 'backspace'
                               ? 'bg-secondary text-muted-foreground'
                               : 'bg-secondary text-foreground hover:bg-secondary/80'
-                          } flex items-center justify-center`}
+                            } flex items-center justify-center`}
                         >
                           {key === 'backspace' ? (
                             <Delete className="w-6 h-6" />
@@ -184,12 +184,31 @@ const QuickAddDrawer = ({ isOpen, onClose, onExpenseAdded }: QuickAddDrawerProps
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -20 }}
-                  className="flex-1 flex flex-col py-4"
+                  className="flex-1 flex flex-col py-4 min-h-0"
                 >
                   <label className="text-sm font-medium text-muted-foreground block mb-4 text-center">
                     Who paid?
                   </label>
-                  
+                  {/* Add new friend */}
+                  <div className="flex gap-2 my-4 pt-4 border-t border-border">
+                    <input
+                      type="text"
+                      value={newFriendName}
+                      onChange={(e) => setNewFriendName(e.target.value)}
+                      placeholder="Add new friend"
+                      className="flex-1 input-field"
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddFriend()}
+                    />
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleAddFriend}
+                      disabled={!newFriendName.trim()}
+                      className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center disabled:opacity-50"
+                    >
+                      <Plus className="w-5 h-5 text-primary-foreground" />
+                    </motion.button>
+                  </div>
+
                   {/* Friend Selector */}
                   <button
                     onClick={() => setShowFriendPicker(!showFriendPicker)}
@@ -209,6 +228,7 @@ const QuickAddDrawer = ({ isOpen, onClose, onExpenseAdded }: QuickAddDrawerProps
                   {/* Friend List */}
                   <div className="flex-1 overflow-y-auto scrollbar-hide">
                     <div className="space-y-2">
+
                       {friends.map((friend) => (
                         <motion.button
                           key={friend.id}
@@ -221,32 +241,14 @@ const QuickAddDrawer = ({ isOpen, onClose, onExpenseAdded }: QuickAddDrawerProps
                             selectedFriend?.id === friend.id
                               ? 'bg-primary/10 border-2 border-primary'
                               : 'bg-muted hover:bg-muted/80'
-                          }`}
+                            }`}
                         >
                           <span className="text-2xl">{friend.emoji}</span>
                           <span className="font-medium text-foreground">{friend.name}</span>
                         </motion.button>
                       ))}
-                      
-                      {/* Add new friend */}
-                      <div className="flex gap-2 mt-4 pt-4 border-t border-border">
-                        <input
-                          type="text"
-                          value={newFriendName}
-                          onChange={(e) => setNewFriendName(e.target.value)}
-                          placeholder="Add new friend"
-                          className="flex-1 input-field"
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddFriend()}
-                        />
-                        <motion.button
-                          whileTap={{ scale: 0.95 }}
-                          onClick={handleAddFriend}
-                          disabled={!newFriendName.trim()}
-                          className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center disabled:opacity-50"
-                        >
-                          <Plus className="w-5 h-5 text-primary-foreground" />
-                        </motion.button>
-                      </div>
+
+
                     </div>
                   </div>
                 </motion.div>
@@ -264,7 +266,7 @@ const QuickAddDrawer = ({ isOpen, onClose, onExpenseAdded }: QuickAddDrawerProps
                   <label className="text-sm font-medium text-muted-foreground block mb-4 text-center">
                     What for? (optional)
                   </label>
-                  
+
                   <input
                     type="text"
                     value={purpose}
@@ -272,7 +274,7 @@ const QuickAddDrawer = ({ isOpen, onClose, onExpenseAdded }: QuickAddDrawerProps
                     placeholder="e.g., Lunch, Auto, etc."
                     className="input-field mb-4"
                   />
-                  
+
                   {/* Quick purposes */}
                   <div className="flex flex-wrap gap-2 mb-6">
                     {quickPurposes.map((p) => (
@@ -284,7 +286,7 @@ const QuickAddDrawer = ({ isOpen, onClose, onExpenseAdded }: QuickAddDrawerProps
                           purpose === p
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-secondary text-secondary-foreground'
-                        }`}
+                          }`}
                       >
                         {p}
                       </motion.button>
@@ -322,7 +324,7 @@ const QuickAddDrawer = ({ isOpen, onClose, onExpenseAdded }: QuickAddDrawerProps
                   Back
                 </motion.button>
               )}
-              
+
               {step < 3 ? (
                 <motion.button
                   whileTap={{ scale: 0.98 }}
