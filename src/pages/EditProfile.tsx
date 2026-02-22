@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import UserAvatar from '@/components/UserAvatar';
 
 const nameSchema = z.string().min(1, 'Please enter your name').max(100, 'Name is too long');
 
@@ -67,8 +68,6 @@ const EditProfile = () => {
   }
 
   const displayName = fullName?.trim() || user?.user_metadata?.full_name || 'Account User';
-  const userInitial = displayName.charAt(0).toUpperCase();
-
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-lg mx-auto px-4 pt-4 pb-8 space-y-6">
@@ -93,9 +92,7 @@ const EditProfile = () => {
           <div className="absolute -left-8 -bottom-8 w-20 h-20 rounded-full bg-success/10" />
           <div className="relative space-y-3">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-primary/15 text-primary font-bold flex items-center justify-center text-lg">
-                {userInitial}
-              </div>
+              <UserAvatar seed={user?.id ?? user?.email} size="md" />
               <div>
                 <h1 className="text-xl font-bold text-foreground leading-tight">{displayName}</h1>
                 <p className="text-sm text-muted-foreground">{user?.email || 'No email'}</p>

@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getCloudSyncDiagnostics, isCloudSyncEnabled, loadData, pullCloudToLocal, syncNowToCloud } from '@/lib/storage';
 import { toast } from 'sonner';
+import UserAvatar from '@/components/UserAvatar';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -120,8 +121,6 @@ const Profile = () => {
   }
 
   const displayName = fullName?.trim() || user?.user_metadata?.full_name || 'Account User';
-  const userInitial = displayName.charAt(0).toUpperCase();
-
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-lg mx-auto px-4 pt-4 pb-8 space-y-5">
@@ -141,9 +140,7 @@ const Profile = () => {
           <div className="absolute right-0 top-0 w-24 h-24 rounded-full bg-primary/10 -translate-y-1/2 translate-x-1/2" />
           <div className="relative flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-primary/15 text-primary font-bold flex items-center justify-center text-lg">
-                {userInitial}
-              </div>
+              <UserAvatar seed={user?.id ?? user?.email} size="md" />
               <div>
                 <h1 className="text-xl font-bold text-foreground leading-tight">{displayName}</h1>
                 <p className="text-sm text-muted-foreground">{user?.email || 'No email'}</p>

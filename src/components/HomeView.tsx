@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { TrendingUp, Clock, ArrowUpRight, User } from 'lucide-react';
+import { TrendingUp, Clock, ArrowUpRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { 
   getTotalPending, 
@@ -16,6 +16,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffect, useState } from 'react';
 import OwedSettledChart from './OwedSettledChart';
+import UserAvatar from './UserAvatar';
 
 interface HomeViewProps {
   refreshKey: number;
@@ -69,9 +70,9 @@ const HomeView = ({ refreshKey }: HomeViewProps) => {
         <motion.button
           whileTap={{ scale: 0.95 }}
           onClick={() => navigate(user ? '/profile' : '/auth')}
-          className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center"
+          className="rounded-full"
         >
-          <User className="w-5 h-5 text-foreground" />
+          <UserAvatar seed={user?.id ?? user?.email} size="sm" className="rounded-full" />
         </motion.button>
       </motion.div>
 
