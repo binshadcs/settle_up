@@ -27,7 +27,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Main Content */}
-      <main className="pb-24 pt-6 px-5 max-w-lg mx-auto">
+      <main className="pb-28 pt-6 px-5 max-w-lg mx-auto">
         <AnimatePresence mode="wait">
           {activeTab === 'home' && (
             <motion.div

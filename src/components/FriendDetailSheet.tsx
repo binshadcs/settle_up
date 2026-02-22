@@ -6,11 +6,16 @@ import {
   Expense,
   getPendingExpensesForFriend,
   getSettledExpensesForFriend,
+  getActivitiesForFriend,
   getFriendBalance,
   markExpenseAsPaid,
   markAllExpensesPaidForFriend,
   formatCurrency,
-  formatRelativeTime
+  formatRelativeTime,
+  applyExpensePayment,
+  getExpenseRemainingAmount,
+  formatShortDate,
+  Activity
 } from '@/lib/storage';
 import SuccessAnimation from './SuccessAnimation';
 
@@ -27,12 +32,15 @@ const FriendDetailSheet = ({ friend, isOpen, onClose, onRefresh }: FriendDetailS
   const [balance, setBalance] = useState(0);
   const [showSuccess, setShowSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
+  const [partialPayments, setPartialPayments] = useState<Record<string, string>>({});
+  const [activities, setActivities] = useState<Activity[]>([]);
 
   useEffect(() => {
     if (friend) {
       setPendingExpenses(getPendingExpensesForFriend(friend.id));
       setSettledExpenses(getSettledExpensesForFriend(friend.id));
       setBalance(getFriendBalance(friend.id));
+      setActivities(getActivitiesForFriend(friend.id));
       setActiveTab('pending');
     }
   }, [friend, isOpen]);
@@ -44,10 +52,27 @@ const FriendDetailSheet = ({ friend, isOpen, onClose, onRefresh }: FriendDetailS
       setPendingExpenses(newPending);
       setSettledExpenses(getSettledExpensesForFriend(friend.id));
       setBalance(getFriendBalance(friend.id));
+      setActivities(getActivitiesForFriend(friend.id));
       
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 1800);
     }
+    onRefresh();
+  };
+
+  const handlePartialPayment = (expenseId: string, amount: number) => {
+    applyExpensePayment(expenseId, amount);
+    if (friend) {
+      const newPending = getPendingExpensesForFriend(friend.id);
+      setPendingExpenses(newPending);
+      setSettledExpenses(getSettledExpensesForFriend(friend.id));
+      setBalance(getFriendBalance(friend.id));
+      setActivities(getActivitiesForFriend(friend.id));
+
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 1800);
+    }
+    setPartialPayments(prev => ({ ...prev, [expenseId]: '' }));
     onRefresh();
   };
 
@@ -57,6 +82,7 @@ const FriendDetailSheet = ({ friend, isOpen, onClose, onRefresh }: FriendDetailS
       setPendingExpenses([]);
       setSettledExpenses(getSettledExpensesForFriend(friend.id));
       setBalance(0);
+      setActivities(getActivitiesForFriend(friend.id));
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 2000);
       onRefresh();
@@ -64,6 +90,13 @@ const FriendDetailSheet = ({ friend, isOpen, onClose, onRefresh }: FriendDetailS
   };
 
   if (!friend) return null;
+  const expenseMap = new Map([...pendingExpenses, ...settledExpenses].map((e) => [e.id, e]));
+  const activityItems = activities
+    .map((activity) => ({
+      ...activity,
+      expense: expenseMap.get(activity.expenseId),
+    }))
+    .filter((item): item is Activity & { expense: Expense } => !!item.expense);
 
   return (
     <AnimatePresence>
@@ -156,35 +189,89 @@ const FriendDetailSheet = ({ friend, isOpen, onClose, onRefresh }: FriendDetailS
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {pendingExpenses.map((expense) => (
-                        <motion.div
-                          key={expense.id}
-                          layout
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, x: -100 }}
-                          className="card-flat p-4 flex items-center justify-between"
-                        >
-                          <div>
-                            <p className="font-medium text-foreground">{expense.purpose}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatRelativeTime(expense.createdAt)}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="font-semibold text-foreground amount-display">
-                              {formatCurrency(expense.amount)}
-                            </span>
-                            <motion.button
-                              whileTap={{ scale: 0.9 }}
-                              onClick={() => handleMarkPaid(expense.id)}
-                              className="w-8 h-8 rounded-full bg-success/10 flex items-center justify-center hover:bg-success/20 transition-colors"
+                      {pendingExpenses.map((expense) => {
+                        const remaining = getExpenseRemainingAmount(expense);
+                        const paidSoFar = Math.max(0, expense.paidAmount || 0);
+                        const showPaidInfo = paidSoFar > 0 && remaining > 0;
+                        const inputValue = partialPayments[expense.id] || '';
+                        const parsedPayment = parseFloat(inputValue);
+                        const isOverpay = !Number.isNaN(parsedPayment) && parsedPayment > remaining;
+                        const canApply = !!inputValue && !Number.isNaN(parsedPayment) && parsedPayment > 0 && !isOverpay;
+
+                        return (
+                          <div key={expense.id} className="space-y-2">
+                            <motion.div
+                              layout
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, x: -100 }}
+                              className="card-flat p-4 flex items-center justify-between"
                             >
-                              <Check className="w-4 h-4 text-success" />
-                            </motion.button>
+                              <div>
+                                <p className="font-medium text-foreground">{expense.purpose}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatRelativeTime(expense.createdAt)}
+                                </p>
+                                {showPaidInfo && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Paid {formatCurrency(paidSoFar)} of {formatCurrency(expense.amount)}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="font-semibold text-foreground amount-display">
+                                  {formatCurrency(remaining)}
+                                </span>
+                                <motion.button
+                                  whileTap={{ scale: 0.9 }}
+                                  onClick={() => handleMarkPaid(expense.id)}
+                                  className="w-8 h-8 rounded-full bg-success/10 flex items-center justify-center hover:bg-success/20 transition-colors"
+                                >
+                                  <Check className="w-4 h-4 text-success" />
+                                </motion.button>
+                              </div>
+                            </motion.div>
+
+                            <div className="flex items-center gap-2 px-1">
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                max={remaining}
+                                placeholder="Partial payment"
+                                value={inputValue}
+                                onChange={(e) => {
+                                  const nextValue = e.target.value;
+                                  const nextNumber = parseFloat(nextValue);
+                                  if (!Number.isNaN(nextNumber) && nextNumber > remaining) {
+                                    setPartialPayments(prev => ({ ...prev, [expense.id]: remaining.toString() }));
+                                    return;
+                                  }
+                                  setPartialPayments(prev => ({ ...prev, [expense.id]: nextValue }));
+                                }}
+                                className="flex-1 h-9 rounded-lg bg-muted/60 border border-border px-3 text-sm text-foreground placeholder:text-muted-foreground"
+                              />
+                              <motion.button
+                                whileTap={{ scale: 0.97 }}
+                                disabled={!canApply}
+                                onClick={() => {
+                                  if (!canApply) return;
+                                  const amount = Math.min(remaining, parsedPayment);
+                                  handlePartialPayment(expense.id, amount);
+                                }}
+                                className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50"
+                              >
+                                Pay
+                              </motion.button>
+                            </div>
+                            {isOverpay && (
+                              <p className="text-xs text-warning px-1">
+                                Amount cannot exceed {formatCurrency(remaining)}
+                              </p>
+                            )}
                           </div>
-                        </motion.div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 
@@ -203,29 +290,35 @@ const FriendDetailSheet = ({ friend, isOpen, onClose, onRefresh }: FriendDetailS
                 </>
               ) : (
                 <>
-                  {settledExpenses.length === 0 ? (
+                  {activityItems.length === 0 ? (
                     <div className="text-center py-12">
                       <History className="w-8 h-8 text-muted-foreground/50 mx-auto mb-3" />
-                      <p className="text-muted-foreground text-sm">No settlement history yet</p>
+                      <p className="text-muted-foreground text-sm">No history yet</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {settledExpenses.map((expense) => (
+                      {activityItems.map((activity) => {
+                        const label = activity.type === 'settled' ? 'Settled' : activity.type === 'payment' ? 'Paid' : 'Created';
+                        const amount = activity.type === 'created' ? activity.expense.amount : activity.amount;
+                        return (
                         <div
-                          key={expense.id}
+                          key={activity.id}
                           className="py-3 flex items-center justify-between border-b border-border/50 last:border-0"
                         >
                           <div>
-                            <p className="font-medium text-foreground text-sm">{expense.purpose}</p>
+                            <p className="font-medium text-foreground text-sm">{activity.expense.purpose}</p>
                             <p className="text-xs text-muted-foreground">
-                              Settled {formatRelativeTime(expense.paidAt || expense.createdAt)}
+                              {label} {formatShortDate(activity.createdAt)}
                             </p>
                           </div>
-                          <span className="font-medium text-success text-sm amount-display">
-                            ✓ {formatCurrency(expense.amount)}
+                          <span className={`font-medium text-sm amount-display ${
+                            activity.type === 'settled' ? 'text-success' : activity.type === 'payment' ? 'text-warning' : 'text-foreground'
+                          }`}>
+                            {activity.type === 'settled' ? '✓ ' : ''}{formatCurrency(amount)}
                           </span>
                         </div>
-                      ))}
+                      );
+                      })}
                     </div>
                   )}
                 </>

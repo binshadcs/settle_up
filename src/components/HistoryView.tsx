@@ -3,9 +3,10 @@ import { motion } from 'framer-motion';
 import { Clock, ArrowUpRight, Check } from 'lucide-react';
 import { 
   getExpenses, 
+  getActivities,
   getFriendById, 
   formatCurrency, 
-  formatRelativeTime,
+  formatShortDate,
   Expense 
 } from '@/lib/storage';
 
@@ -13,37 +14,41 @@ interface HistoryViewProps {
   refreshKey: number;
 }
 
+interface ActivityItem {
+  type: 'created' | 'payment' | 'settled';
+  date: string;
+  amount: number;
+  expense: Expense;
+}
+
 const HistoryView = ({ refreshKey }: HistoryViewProps) => {
-  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'settled'>('all');
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
 
   useEffect(() => {
     const allExpenses = getExpenses();
-    // Sort by most recent first
-    const sorted = allExpenses.sort((a, b) => {
-      const dateA = a.paidAt || a.createdAt;
-      const dateB = b.paidAt || b.createdAt;
-      return new Date(dateB).getTime() - new Date(dateA).getTime();
-    });
-    setExpenses(sorted);
+    const expenseMap = new Map(allExpenses.map((e) => [e.id, e]));
+    const activityList = getActivities().map((activity) => ({
+      type: activity.type,
+      date: activity.createdAt,
+      amount: Number.isFinite(activity.amount) ? activity.amount : 0,
+      expense: expenseMap.get(activity.expenseId),
+    })).filter((a): a is ActivityItem => !!a.expense);
+    setActivities(activityList);
   }, [refreshKey]);
 
-  const filteredExpenses = expenses.filter(expense => {
-    if (filter === 'pending') return !expense.isPaid;
-    if (filter === 'settled') return expense.isPaid;
+  const filteredActivities = activities.filter((activity) => {
+    if (filter === 'pending') return activity.type === 'created' && !activity.expense.isPaid;
+    if (filter === 'settled') return activity.type !== 'created';
     return true;
-  });
+  }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const groupedByDate = filteredExpenses.reduce((groups, expense) => {
-    const date = new Date(expense.createdAt).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric'
-    });
+  const groupedByDate = filteredActivities.reduce((groups, activity) => {
+    const date = formatShortDate(activity.date);
     if (!groups[date]) groups[date] = [];
-    groups[date].push(expense);
+    groups[date].push(activity);
     return groups;
-  }, {} as Record<string, Expense[]>);
+  }, {} as Record<string, ActivityItem[]>);
 
   return (
     <div className="space-y-6">
@@ -98,11 +103,16 @@ const HistoryView = ({ refreshKey }: HistoryViewProps) => {
                 {date}
               </h3>
               <div className="space-y-2">
-                {dateExpenses.map((expense, index) => {
+                {dateExpenses.map((activity, index) => {
+                  const { expense } = activity;
                   const friend = getFriendById(expense.friendId);
+                  const label = activity.type === 'settled' ? 'Settled' : activity.type === 'payment' ? 'Paid' : 'Created';
+                  const amount = Number.isFinite(activity.amount)
+                    ? (activity.type === 'created' ? expense.amount : activity.amount)
+                    : 0;
                   return (
                     <motion.div
-                      key={expense.id}
+                      key={`${expense.id}-${activity.type}-${activity.date}-${index}`}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: groupIndex * 0.05 + index * 0.03 }}
@@ -117,24 +127,28 @@ const HistoryView = ({ refreshKey }: HistoryViewProps) => {
                             <p className="font-medium text-foreground truncate">
                               {expense.purpose || 'Payment'}
                             </p>
-                            {expense.isPaid ? (
+                            {activity.type === 'settled' ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 text-xs font-medium">
                                 <Check className="w-3 h-3" />
                                 Settled
                               </span>
+                            ) : activity.type === 'payment' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/10 text-warning text-xs font-medium">
+                                Paid
+                              </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
                                 <ArrowUpRight className="w-3 h-3" />
-                                Pending
+                                Created
                               </span>
                             )}
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            {friend?.name || 'Unknown'} • {formatRelativeTime(expense.createdAt)}
+                            {friend?.name || 'Unknown'} • {label} {formatShortDate(activity.date)}
                           </p>
                         </div>
-                        <p className={`font-semibold ${expense.isPaid ? 'text-muted-foreground' : 'text-foreground'}`}>
-                          {formatCurrency(expense.amount)}
+                        <p className={`font-semibold ${activity.type === 'settled' ? 'text-muted-foreground' : activity.type === 'payment' ? 'text-warning' : 'text-foreground'}`}>
+                          {formatCurrency(amount)}
                         </p>
                       </div>
                       {expense.tags && expense.tags.length > 0 && (

@@ -11,7 +11,9 @@ import {
   markAllExpensesPaidForFriend,
   getTotalPending,
   formatCurrency,
-  formatRelativeTime
+  formatRelativeTime,
+  applyExpensePayment,
+  getExpenseRemainingAmount
 } from '@/lib/storage';
 import SuccessAnimation from './SuccessAnimation';
 
@@ -33,6 +35,7 @@ const SettleView = ({ refreshKey, onRefresh }: SettleViewProps) => {
   const [expandedFriend, setExpandedFriend] = useState<string | null>(null);
   const [remainingCount, setRemainingCount] = useState(0);
   const [settledAmount, setSettledAmount] = useState<number | undefined>(undefined);
+  const [partialPayments, setPartialPayments] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadData();
@@ -52,14 +55,20 @@ const SettleView = ({ refreshKey, onRefresh }: SettleViewProps) => {
     setTotalPending(getTotalPending());
   };
 
-  const handleMarkPaid = (expenseId: string, friendId: string) => {
+  const getPendingCount = () => {
+    const friends = getFriends();
+    return friends.reduce((acc, friend) => acc + getPendingExpensesForFriend(friend.id).length, 0);
+  };
+
+  const handleMarkPaid = (expenseId: string, amount?: number) => {
     markExpenseAsPaid(expenseId);
     loadData();
     onRefresh();
     
     // Calculate remaining and show success
-    const remaining = friendsWithPending.reduce((acc, f) => acc + f.expenses.length, 0) - 1;
+    const remaining = Math.max(0, getPendingCount());
     setRemainingCount(remaining);
+    if (amount !== undefined) setSettledAmount(amount);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 1800);
   };
@@ -72,7 +81,7 @@ const SettleView = ({ refreshKey, onRefresh }: SettleViewProps) => {
     loadData();
     onRefresh();
     
-    const remaining = friendsWithPending.filter(f => f.friend.id !== friendId).reduce((acc, f) => acc + f.expenses.length, 0);
+    const remaining = Math.max(0, getPendingCount());
     setRemainingCount(remaining);
     setSettledAmount(amount);
     setShowSuccess(true);
@@ -85,8 +94,20 @@ const SettleView = ({ refreshKey, onRefresh }: SettleViewProps) => {
     });
     loadData();
     onRefresh();
+    setRemainingCount(0);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2500);
+  };
+
+  const handlePartialPayment = (expenseId: string, amount: number) => {
+    applyExpensePayment(expenseId, amount);
+    loadData();
+    onRefresh();
+    setPartialPayments(prev => ({ ...prev, [expenseId]: '' }));
+    setRemainingCount(Math.max(0, getPendingCount()));
+    setSettledAmount(amount);
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 1800);
   };
 
   const containerVariants = {
@@ -214,35 +235,91 @@ const SettleView = ({ refreshKey, onRefresh }: SettleViewProps) => {
                   className="overflow-hidden"
                 >
                   <div className="px-4 pb-4 space-y-2">
-                    {expenses.map((expense) => (
-                      <motion.div
-                        key={expense.id}
-                        layout
-                        className="flex items-center justify-between py-2 px-3 bg-muted/50 rounded-xl"
-                      >
-                        <div>
-                          <p className="font-medium text-foreground text-sm">{expense.purpose}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatRelativeTime(expense.createdAt)}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-foreground text-sm amount-display">
-                            {formatCurrency(expense.amount)}
-                          </span>
-                          <motion.button
-                            whileTap={{ scale: 0.85 }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleMarkPaid(expense.id, friend.id);
-                            }}
-                            className="w-7 h-7 rounded-full bg-success/10 flex items-center justify-center hover:bg-success/20 transition-colors"
+                    {expenses.map((expense) => {
+                      const remaining = getExpenseRemainingAmount(expense);
+                      const paidSoFar = Math.max(0, expense.paidAmount || 0);
+                      const showPaidInfo = paidSoFar > 0 && remaining > 0;
+                      const inputValue = partialPayments[expense.id] || '';
+                      const parsedPayment = parseFloat(inputValue);
+                      const isOverpay = !Number.isNaN(parsedPayment) && parsedPayment > remaining;
+                      const canApply = !!inputValue && !Number.isNaN(parsedPayment) && parsedPayment > 0 && !isOverpay;
+
+                      return (
+                        <div key={expense.id} className="space-y-2">
+                          <motion.div
+                            layout
+                            className="flex items-center justify-between py-2 px-3 bg-muted/50 rounded-xl"
                           >
-                            <Check className="w-3.5 h-3.5 text-success" />
-                          </motion.button>
+                            <div>
+                              <p className="font-medium text-foreground text-sm">{expense.purpose}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatRelativeTime(expense.createdAt)}
+                              </p>
+                              {showPaidInfo && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Paid {formatCurrency(paidSoFar)} of {formatCurrency(expense.amount)}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-foreground text-sm amount-display">
+                                {formatCurrency(remaining)}
+                              </span>
+                              <motion.button
+                                whileTap={{ scale: 0.85 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMarkPaid(expense.id, remaining);
+                                }}
+                                className="w-7 h-7 rounded-full bg-success/10 flex items-center justify-center hover:bg-success/20 transition-colors"
+                              >
+                                <Check className="w-3.5 h-3.5 text-success" />
+                              </motion.button>
+                            </div>
+                          </motion.div>
+
+                          <div className="flex items-center gap-2 px-1">
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              max={remaining}
+                              placeholder="Partial payment"
+                              value={inputValue}
+                              onChange={(e) => {
+                                const nextValue = e.target.value;
+                                const nextNumber = parseFloat(nextValue);
+                                if (!Number.isNaN(nextNumber) && nextNumber > remaining) {
+                                  setPartialPayments(prev => ({ ...prev, [expense.id]: remaining.toString() }));
+                                  return;
+                                }
+                                setPartialPayments(prev => ({ ...prev, [expense.id]: nextValue }));
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex-1 h-9 rounded-lg bg-muted/60 border border-border px-3 text-sm text-foreground placeholder:text-muted-foreground"
+                            />
+                            <motion.button
+                              whileTap={{ scale: 0.97 }}
+                              disabled={!canApply}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!canApply) return;
+                                const amount = Math.min(remaining, parsedPayment);
+                                handlePartialPayment(expense.id, amount);
+                              }}
+                              className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50"
+                            >
+                              Pay
+                            </motion.button>
+                          </div>
+                          {isOverpay && (
+                            <p className="text-xs text-warning px-1">
+                              Amount cannot exceed {formatCurrency(remaining)}
+                            </p>
+                          )}
                         </div>
-                      </motion.div>
-                    ))}
+                      );
+                    })}
                     
                     {/* Settle All for Friend */}
                     <motion.button

@@ -4,15 +4,18 @@ import { useNavigate } from 'react-router-dom';
 import { 
   getTotalPending, 
   getTopOwedFriends, 
-  getRecentActivity, 
+  getExpenses,
+  getActivities,
   formatCurrency,
   formatRelativeTime,
   getFriendById,
   Friend,
-  Expense
+  Expense,
+  Activity
 } from '@/lib/storage';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffect, useState } from 'react';
+import OwedSettledChart from './OwedSettledChart';
 
 interface HomeViewProps {
   refreshKey: number;
@@ -21,14 +24,18 @@ interface HomeViewProps {
 const HomeView = ({ refreshKey }: HomeViewProps) => {
   const [totalPending, setTotalPending] = useState(0);
   const [topFriends, setTopFriends] = useState<{ friend: Friend; amount: number }[]>([]);
-  const [recentActivity, setRecentActivity] = useState<Expense[]>([]);
+  const [recentActivity, setRecentActivity] = useState<Activity[]>([]);
+  const [allActivities, setAllActivities] = useState<Activity[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     setTotalPending(getTotalPending());
     setTopFriends(getTopOwedFriends(3));
-    setRecentActivity(getRecentActivity(5));
+    setExpenses(getExpenses());
+    setAllActivities(getActivities());
+    setRecentActivity(getActivities(5));
   }, [refreshKey]);
 
   const containerVariants = {
@@ -51,7 +58,7 @@ const HomeView = ({ refreshKey }: HomeViewProps) => {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-6"
+      className="space-y-7"
     >
       {/* Header */}
       <motion.div variants={itemVariants} className="flex items-center justify-between">
@@ -83,7 +90,7 @@ const HomeView = ({ refreshKey }: HomeViewProps) => {
             {formatCurrency(totalPending)}
           </p>
           {totalPending === 0 && (
-            <p className="text-sm text-success mt-2 font-medium">All clear! No pending dues 🎉</p>
+            <p className="text-sm text-success mt-2 font-medium">All clear! No pending dues</p>
           )}
         </div>
       </motion.div>
@@ -101,7 +108,7 @@ const HomeView = ({ refreshKey }: HomeViewProps) => {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className="card-flat p-4 flex items-center justify-between"
+                className="card-flat p-4 flex items-center justify-between bg-gradient-to-r from-secondary/60 to-secondary/30"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-lg">
@@ -123,6 +130,11 @@ const HomeView = ({ refreshKey }: HomeViewProps) => {
         </motion.div>
       )}
 
+      {/* Owed vs Settled Trend */}
+      <motion.div variants={itemVariants}>
+        <OwedSettledChart activities={allActivities} />
+      </motion.div>
+
       {/* Recent Activity */}
       <motion.div variants={itemVariants} className="space-y-3">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
@@ -139,36 +151,43 @@ const HomeView = ({ refreshKey }: HomeViewProps) => {
           </div>
         ) : (
           <div className="space-y-2">
-            {recentActivity.map((expense, index) => {
+            {recentActivity.map((activity, index) => {
+              const expense = expenses.find((e) => e.id === activity.expenseId);
+              if (!expense) return null;
               const friend = getFriendById(expense.friendId);
               if (!friend) return null;
+              const displayAmount = activity.type === 'created' ? expense.amount : activity.amount;
               
               return (
                 <motion.div
-                  key={expense.id}
+                  key={activity.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  className="flex items-center justify-between py-3 border-b border-border/50 last:border-0"
+                  className="card-flat px-3.5 py-3 flex items-center justify-between border border-border/35 bg-card/55"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-lg">{friend.emoji}</span>
+                    <span className="text-lg w-8 h-8 rounded-full bg-secondary flex items-center justify-center">{friend.emoji}</span>
                     <div>
                       <p className="font-medium text-foreground text-sm">{expense.purpose}</p>
                       <p className="text-xs text-muted-foreground">
-                        {friend.name} • {formatRelativeTime(expense.paidAt || expense.createdAt)}
+                        {friend.name} • {activity.type === 'settled' ? 'Settled' : activity.type === 'payment' ? 'Paid' : 'Created'} {formatRelativeTime(activity.createdAt)}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`font-semibold text-sm amount-display ${
-                      expense.isPaid ? 'text-success' : 'text-foreground'
-                    }`}>
-                      {expense.isPaid ? '✓ ' : ''}{formatCurrency(expense.amount)}
-                    </span>
-                    {!expense.isPaid && (
-                      <span className="badge-pending">Pending</span>
+                   
+                    {activity.type === 'created' && (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">Created</span>
                     )}
+                    {activity.type === 'payment' && (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-warning/10 text-warning">Paid</span>
+                    )}
+                    <span className={`font-semibold text-sm amount-display ${
+                      activity.type === 'settled' ? 'text-success' : activity.type === 'payment' ? 'text-warning' : 'text-foreground'
+                    }`}>
+                      {activity.type === 'settled' ? '✓ ' : ''}{formatCurrency(displayAmount)}
+                    </span>
                   </div>
                 </motion.div>
               );
