@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ChevronRight, Cloud, CloudDownload, CloudUpload, Database, HardDrive, LogOut, ShieldCheck, User } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Cloud, CloudDownload, CloudUpload, Database, FileText, HardDrive, Lock, LogOut, Shield, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getCloudSyncDiagnostics, isCloudSyncEnabled, loadData, pullCloudToLocal, syncNowToCloud } from '@/lib/storage';
@@ -161,8 +161,9 @@ const Profile = () => {
 
         <div className="card-elevated p-3 space-y-1">
           <MenuItem icon={User} label="Edit Profile" onClick={() => navigate('/profile/edit')} />
-          <MenuItem icon={ShieldCheck} label="Terms & Conditions" onClick={() => navigate('/profile/terms')} />
-          <MenuItem icon={ShieldCheck} label="Privacy Policy" onClick={() => navigate('/profile/privacy')} />
+          <MenuItem icon={Lock} label="Change Password" onClick={() => navigate('/profile/password')} />
+          <MenuItem icon={FileText} label="Terms & Conditions" onClick={() => navigate('/profile/terms')} />
+          <MenuItem icon={Shield} label="Privacy Policy" onClick={() => navigate('/profile/privacy')} />
         </div>
 
         <div className="card-elevated p-4 sm:p-5 space-y-4 relative overflow-hidden bg-gradient-to-br from-card via-card to-secondary/35">

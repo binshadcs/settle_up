@@ -161,10 +161,18 @@ const OwedSettledChart = ({ activities }: OwedSettledChartProps) => {
 
       <div className="h-52">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} barCategoryGap={10}>
+          <BarChart data={chartData} barCategoryGap={10} margin={{ top: 4, right: 0, left: -8, bottom: 8 }}>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.35} />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+              axisLine={false}
+              tickLine={false}
+              height={24}
+              tickMargin={8}
+            />
             <YAxis
+              width={36}
               tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
               axisLine={false}
               tickLine={false}
