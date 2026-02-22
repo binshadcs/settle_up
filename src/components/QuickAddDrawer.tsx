@@ -5,8 +5,7 @@ import {
   Friend,
   getFriends,
   addFriend,
-  addExpense,
-  getRandomEmoji
+  addExpense
 } from '@/lib/storage';
 
 interface QuickAddDrawerProps {
@@ -28,7 +27,7 @@ const QuickAddDrawer = ({ isOpen, onClose, onExpenseAdded }: QuickAddDrawerProps
 
   useEffect(() => {
     if (isOpen) {
-      setFriends(getFriends());
+      setFriends([...getFriends()]);
       setAmount('');
       setSelectedFriend(null);
       setPurpose('');
@@ -41,12 +40,16 @@ const QuickAddDrawer = ({ isOpen, onClose, onExpenseAdded }: QuickAddDrawerProps
   const handleAddFriend = () => {
     if (newFriendName.trim()) {
       const newFriend = addFriend(newFriendName);
-      setFriends(prev => [...prev, newFriend]);
+      setFriends([...getFriends()]);
       setSelectedFriend(newFriend);
       setNewFriendName('');
       setShowFriendPicker(false);
     }
   };
+
+  const uniqueFriends = friends.filter(
+    (friend, index, list) => list.findIndex((f) => f.id === friend.id) === index
+  );
 
   const handleSubmit = () => {
     if (!amount || !selectedFriend) return;
@@ -229,7 +232,7 @@ const QuickAddDrawer = ({ isOpen, onClose, onExpenseAdded }: QuickAddDrawerProps
                   <div className="flex-1 overflow-y-auto scrollbar-hide">
                     <div className="space-y-2">
 
-                      {friends.map((friend) => (
+                      {uniqueFriends.map((friend) => (
                         <motion.button
                           key={friend.id}
                           whileTap={{ scale: 0.98 }}

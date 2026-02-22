@@ -116,7 +116,7 @@ const HistoryView = ({ refreshKey }: HistoryViewProps) => {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: groupIndex * 0.05 + index * 0.03 }}
-                      className="card-elevated p-4"
+                      className="card-elevated px-3.5 py-3"
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-lg">
@@ -124,30 +124,30 @@ const HistoryView = ({ refreshKey }: HistoryViewProps) => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className="font-medium text-foreground truncate">
+                            <p className="font-medium text-sm text-foreground truncate">
                               {expense.purpose || 'Payment'}
                             </p>
                             {activity.type === 'settled' ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 text-xs font-medium">
-                                <Check className="w-3 h-3" />
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 text-[11px] font-medium">
+                                <Check className="w-2.5 h-2.5" />
                                 Settled
                               </span>
                             ) : activity.type === 'payment' ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/10 text-warning text-xs font-medium">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/10 text-warning text-[11px] font-medium">
                                 Paid
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
-                                <ArrowUpRight className="w-3 h-3" />
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium">
+                                <ArrowUpRight className="w-2.5 h-2.5" />
                                 Created
                               </span>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-xs text-muted-foreground">
                             {friend?.name || 'Unknown'} • {label} {formatShortDate(activity.date)}
                           </p>
                         </div>
-                        <p className={`font-semibold ${activity.type === 'settled' ? 'text-muted-foreground' : activity.type === 'payment' ? 'text-warning' : 'text-foreground'}`}>
+                        <p className={`font-semibold text-sm amount-display ${activity.type === 'settled' ? 'text-muted-foreground' : activity.type === 'payment' ? 'text-warning' : 'text-foreground'}`}>
                           {formatCurrency(amount)}
                         </p>
                       </div>

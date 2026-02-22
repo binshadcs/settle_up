@@ -26,3 +26,9 @@ dist-ssr
 .env
 
 dev-dist
+
+# Supabase local/cli state (keep supabase/migrations tracked)
+.supabase/
+supabase/.temp/
+supabase/.branches/
+supabase/.DS_Store

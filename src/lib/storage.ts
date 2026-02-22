@@ -1,3 +1,6 @@
+import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
+
 // Types
 export interface Friend {
   id: string;
@@ -31,6 +34,9 @@ export interface AppData {
   friends: Friend[];
   expenses: Expense[];
   activities: Activity[];
+  meta?: {
+    updatedAt: string;
+  };
 }
 
 const LEGACY_STORAGE_KEY = 'settleup-data';
@@ -41,6 +47,11 @@ const STORE_RECORD_KEY = 'settleup-data';
 let initialized = false;
 let dbCache: AppData = { friends: [], expenses: [], activities: [] };
 let writeQueue: Promise<void> = Promise.resolve();
+let cloudWriteQueue: Promise<void> = Promise.resolve();
+let syncUserId: string | null = null;
+let isApplyingCloudData = false;
+let lastCloudSyncError: string | null = null;
+let lastPersistedSignature = '';
 
 // Generate unique ID
 export const generateId = (): string => {
@@ -80,13 +91,61 @@ const buildActivitiesFromExpenses = (expenses: Expense[]): Activity[] => {
   return activities.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
-const normalizeData = (data?: Partial<AppData> | null): AppData => {
-  const expenses = Array.isArray(data?.expenses) ? data!.expenses : [];
+const uniqueById = <T extends { id: string }>(items: T[]): T[] => {
+  const map = new Map<string, T>();
+  for (const item of items) map.set(item.id, item);
+  return Array.from(map.values());
+};
+
+const sortCanonical = (data: AppData): AppData => {
+  const friends = [...data.friends].sort((a, b) => a.id.localeCompare(b.id));
+  const expenses = [...data.expenses].sort((a, b) => a.id.localeCompare(b.id));
+  const activities = [...data.activities].sort((a, b) => {
+    const d = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    if (d !== 0) return d;
+    return a.id.localeCompare(b.id);
+  });
   return {
-    friends: Array.isArray(data?.friends) ? data!.friends : [],
+    friends,
     expenses,
-    activities: Array.isArray(data?.activities) ? data!.activities : buildActivitiesFromExpenses(expenses),
+    activities,
+    meta: data.meta,
   };
+};
+
+const getDataUpdatedAt = (data: AppData): string => {
+  if (data.meta?.updatedAt) return data.meta.updatedAt;
+  const allTimes = [
+    ...data.friends.map((f) => f.createdAt),
+    ...data.expenses.map((e) => e.createdAt),
+    ...data.expenses.map((e) => e.paidAt).filter((v): v is string => !!v),
+    ...data.activities.map((a) => a.createdAt),
+  ].filter(Boolean);
+  if (allTimes.length === 0) return new Date(0).toISOString();
+  return allTimes.sort().at(-1) || new Date(0).toISOString();
+};
+
+const toCanonicalSignature = (data: AppData): string => {
+  const canonical = sortCanonical(data);
+  return JSON.stringify(canonical);
+};
+
+const normalizeData = (data?: Partial<AppData> | null): AppData => {
+  const expenses: Expense[] = uniqueById(Array.isArray(data?.expenses) ? data.expenses : []);
+  const friends: Friend[] = uniqueById(Array.isArray(data?.friends) ? data.friends : []);
+  const activities: Activity[] = uniqueById(
+    Array.isArray(data?.activities) ? data.activities : buildActivitiesFromExpenses(expenses)
+  );
+  const normalized: AppData = {
+    friends,
+    expenses,
+    activities,
+    meta: data?.meta?.updatedAt ? { updatedAt: data.meta.updatedAt } : undefined,
+  };
+  if (!normalized.meta?.updatedAt) {
+    normalized.meta = { updatedAt: getDataUpdatedAt(normalized) };
+  }
+  return normalized;
 };
 
 const openDb = (): Promise<IDBDatabase> => {
@@ -132,7 +191,10 @@ const writeDataToIndexedDb = async (data: AppData): Promise<void> => {
 };
 
 const persistCache = (data: AppData) => {
-  const snapshot = JSON.parse(JSON.stringify(data)) as AppData;
+  const snapshot = normalizeData(JSON.parse(JSON.stringify(data)) as AppData);
+  const signature = toCanonicalSignature(snapshot);
+  if (signature === lastPersistedSignature) return;
+  lastPersistedSignature = signature;
   writeQueue = writeQueue
     .then(() => writeDataToIndexedDb(snapshot))
     .catch((error) => {
@@ -140,12 +202,62 @@ const persistCache = (data: AppData) => {
     });
 };
 
+const uploadSnapshotToCloud = async (userId: string, snapshot: AppData): Promise<void> => {
+  const { error } = await supabase
+    .from('user_app_data')
+    .upsert(
+      {
+        user_id: userId,
+        data: snapshot as unknown as Json,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' }
+    );
+  if (error) throw error;
+};
+
+const fetchCloudSnapshot = async (userId: string): Promise<AppData | null> => {
+  const { data, error } = await supabase
+    .from('user_app_data')
+    .select('data')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) {
+    if (error.code === 'PGRST205') {
+      throw new Error('Table public.user_app_data not found. Apply Supabase migrations on the active project.');
+    }
+    throw error;
+  }
+  const cloudData = (data?.data as Partial<AppData> | null) || null;
+  return cloudData ? normalizeData(cloudData) : null;
+};
+
+const persistCloud = (data: AppData) => {
+  if (!syncUserId || isApplyingCloudData) return;
+  const userId = syncUserId;
+  const snapshot = normalizeData(JSON.parse(JSON.stringify(data)) as AppData);
+  cloudWriteQueue = cloudWriteQueue
+    .then(async () => {
+      await uploadSnapshotToCloud(userId, snapshot);
+      lastCloudSyncError = null;
+    })
+    .catch((error) => {
+      lastCloudSyncError = error instanceof Error ? error.message : 'Cloud sync failed';
+      console.error('Error syncing data to cloud:', error);
+    });
+};
+
+const notifyDataHydrated = () => {
+  window.dispatchEvent(new CustomEvent('settleup:data-hydrated'));
+};
+
 export const initStorage = async (): Promise<void> => {
   if (initialized) return;
   try {
     const indexedDbData = await readDataFromIndexedDb();
     if (indexedDbData) {
-      dbCache = indexedDbData;
+      dbCache = normalizeData(indexedDbData);
+      lastPersistedSignature = toCanonicalSignature(dbCache);
       initialized = true;
       return;
     }
@@ -154,6 +266,7 @@ export const initStorage = async (): Promise<void> => {
     const legacyStored = localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacyStored) {
       dbCache = normalizeData(JSON.parse(legacyStored) as AppData);
+      lastPersistedSignature = toCanonicalSignature(dbCache);
       persistCache(dbCache);
       localStorage.removeItem(LEGACY_STORAGE_KEY);
       initialized = true;
@@ -163,7 +276,8 @@ export const initStorage = async (): Promise<void> => {
     console.error('Error initializing storage:', error);
   }
 
-  dbCache = { friends: [], expenses: [], activities: [] };
+  dbCache = normalizeData({ friends: [], expenses: [], activities: [] });
+  lastPersistedSignature = toCanonicalSignature(dbCache);
   initialized = true;
 };
 
@@ -174,9 +288,92 @@ export const loadData = (): AppData => {
 
 // Save data to in-memory cache and persist to IndexedDB.
 export const saveData = (data: AppData): void => {
-  dbCache = data;
-  persistCache(data);
+  const normalized = normalizeData(data);
+  normalized.meta = { updatedAt: new Date().toISOString() };
+  const incomingSignature = toCanonicalSignature(normalized);
+  if (incomingSignature === lastPersistedSignature) return;
+
+  dbCache = normalized;
+  persistCache(normalized);
+  persistCloud(normalized);
 };
+
+export const setCloudSyncUser = async (userId: string | null): Promise<void> => {
+  await initStorage();
+  syncUserId = userId;
+  lastCloudSyncError = null;
+
+  if (!userId) return;
+
+  let cloudData: AppData | null = null;
+  try {
+    cloudData = await fetchCloudSnapshot(userId);
+  } catch (error) {
+    lastCloudSyncError = error instanceof Error ? error.message : 'Failed to fetch cloud data';
+    console.error('Error fetching cloud data:', error);
+    return;
+  }
+
+  if (cloudData) {
+    const localUpdatedAt = new Date(getDataUpdatedAt(dbCache)).getTime();
+    const cloudUpdatedAt = new Date(getDataUpdatedAt(cloudData)).getTime();
+
+    if (cloudUpdatedAt > localUpdatedAt) {
+      isApplyingCloudData = true;
+      try {
+        dbCache = normalizeData(cloudData);
+        persistCache(dbCache);
+        notifyDataHydrated();
+      } finally {
+        isApplyingCloudData = false;
+      }
+      return;
+    }
+
+    if (localUpdatedAt > cloudUpdatedAt) {
+      persistCloud(dbCache);
+      return;
+    }
+
+    return;
+  }
+
+  persistCloud(dbCache);
+};
+
+export const isCloudSyncEnabled = (): boolean => !!syncUserId;
+
+export const syncNowToCloud = async (): Promise<void> => {
+  if (!syncUserId) return;
+  const userId = syncUserId;
+  await cloudWriteQueue;
+  await uploadSnapshotToCloud(userId, dbCache);
+  lastCloudSyncError = null;
+};
+
+export const pullCloudToLocal = async (): Promise<boolean> => {
+  if (!syncUserId) return false;
+  const userId = syncUserId;
+  const cloudData = await fetchCloudSnapshot(userId);
+  if (!cloudData) return false;
+
+  isApplyingCloudData = true;
+  try {
+    dbCache = cloudData;
+    persistCache(dbCache);
+    notifyDataHydrated();
+  } finally {
+    isApplyingCloudData = false;
+  }
+
+  return true;
+};
+
+export const getCloudSyncDiagnostics = () => ({
+  enabled: !!syncUserId,
+  userId: syncUserId,
+  lastError: lastCloudSyncError,
+});
 
 // Friend operations
 export const addFriend = (name: string): Friend => {
@@ -316,6 +513,55 @@ export const applyExpensePayment = (expenseId: string, amount: number): void => 
       amount: applied,
       createdAt: activityTime,
     });
+  }
+
+  saveData(data);
+};
+
+export const applyPaymentForFriend = (friendId: string, amount: number): void => {
+  const data = loadData();
+  let remainingToApply = Math.max(0, amount);
+  if (remainingToApply <= 0) return;
+
+  const pendingExpenses = data.expenses
+    .filter((expense) => expense.friendId === friendId && getExpenseRemainingAmount(expense) > 0)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  for (const expense of pendingExpenses) {
+    if (remainingToApply <= 0) break;
+
+    const paidSoFar = Math.max(0, expense.paidAmount || 0);
+    const expenseRemaining = Math.max(0, expense.amount - paidSoFar);
+    if (expenseRemaining <= 0) continue;
+
+    const applied = Math.min(expenseRemaining, remainingToApply);
+    const newPaid = paidSoFar + applied;
+    expense.paidAmount = newPaid;
+
+    const activityTime = new Date().toISOString();
+    if (newPaid >= expense.amount) {
+      expense.isPaid = true;
+      expense.paidAt = activityTime;
+      data.activities.push({
+        id: generateId(),
+        type: 'settled',
+        expenseId: expense.id,
+        friendId: expense.friendId,
+        amount: applied,
+        createdAt: activityTime,
+      });
+    } else {
+      data.activities.push({
+        id: generateId(),
+        type: 'payment',
+        expenseId: expense.id,
+        friendId: expense.friendId,
+        amount: applied,
+        createdAt: activityTime,
+      });
+    }
+
+    remainingToApply -= applied;
   }
 
   saveData(data);

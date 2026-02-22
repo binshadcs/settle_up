@@ -26,7 +26,7 @@ const BottomNav = ({ activeTab, onTabChange, onAddClick }: BottomNavProps) => {
             <motion.button
               whileTap={{ scale: 0.94 }}
               onClick={onAddClick}
-              className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-primary flex items-center justify-center border-4 border-background"
+              className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-primary flex items-center justify-center"
               style={{ boxShadow: '0 12px 26px -10px hsl(45 100% 51% / 0.65)' }}
             >
               <Plus className="w-6 h-6 sm:w-7 sm:h-7 text-primary-foreground" strokeWidth={2.6} />

@@ -12,7 +12,7 @@ import {
   getTotalPending,
   formatCurrency,
   formatRelativeTime,
-  applyExpensePayment,
+  applyPaymentForFriend,
   getExpenseRemainingAmount
 } from '@/lib/storage';
 import SuccessAnimation from './SuccessAnimation';
@@ -99,11 +99,11 @@ const SettleView = ({ refreshKey, onRefresh }: SettleViewProps) => {
     setTimeout(() => setShowSuccess(false), 2500);
   };
 
-  const handlePartialPayment = (expenseId: string, amount: number) => {
-    applyExpensePayment(expenseId, amount);
+  const handlePartialPayment = (friendId: string, amount: number) => {
+    applyPaymentForFriend(friendId, amount);
     loadData();
     onRefresh();
-    setPartialPayments(prev => ({ ...prev, [expenseId]: '' }));
+    setPartialPayments(prev => ({ ...prev, [friendId]: '' }));
     setRemainingCount(Math.max(0, getPendingCount()));
     setSettledAmount(amount);
     setShowSuccess(true);
@@ -239,10 +239,6 @@ const SettleView = ({ refreshKey, onRefresh }: SettleViewProps) => {
                       const remaining = getExpenseRemainingAmount(expense);
                       const paidSoFar = Math.max(0, expense.paidAmount || 0);
                       const showPaidInfo = paidSoFar > 0 && remaining > 0;
-                      const inputValue = partialPayments[expense.id] || '';
-                      const parsedPayment = parseFloat(inputValue);
-                      const isOverpay = !Number.isNaN(parsedPayment) && parsedPayment > remaining;
-                      const canApply = !!inputValue && !Number.isNaN(parsedPayment) && parsedPayment > 0 && !isOverpay;
 
                       return (
                         <div key={expense.id} className="space-y-2">
@@ -277,23 +273,33 @@ const SettleView = ({ refreshKey, onRefresh }: SettleViewProps) => {
                               </motion.button>
                             </div>
                           </motion.div>
+                        </div>
+                      );
+                    })}
 
+                    {(() => {
+                      const inputValue = partialPayments[friend.id] || '';
+                      const parsedPayment = parseFloat(inputValue);
+                      const isOverpay = !Number.isNaN(parsedPayment) && parsedPayment > balance;
+                      const canApply = !!inputValue && !Number.isNaN(parsedPayment) && parsedPayment > 0 && !isOverpay;
+                      return (
+                        <>
                           <div className="flex items-center gap-2 px-1">
                             <input
                               type="number"
                               inputMode="decimal"
                               min={0}
-                              max={remaining}
+                              max={balance}
                               placeholder="Partial payment"
                               value={inputValue}
                               onChange={(e) => {
                                 const nextValue = e.target.value;
                                 const nextNumber = parseFloat(nextValue);
-                                if (!Number.isNaN(nextNumber) && nextNumber > remaining) {
-                                  setPartialPayments(prev => ({ ...prev, [expense.id]: remaining.toString() }));
+                                if (!Number.isNaN(nextNumber) && nextNumber > balance) {
+                                  setPartialPayments(prev => ({ ...prev, [friend.id]: balance.toString() }));
                                   return;
                                 }
-                                setPartialPayments(prev => ({ ...prev, [expense.id]: nextValue }));
+                                setPartialPayments(prev => ({ ...prev, [friend.id]: nextValue }));
                               }}
                               onClick={(e) => e.stopPropagation()}
                               className="flex-1 h-9 rounded-lg bg-muted/60 border border-border px-3 text-sm text-foreground placeholder:text-muted-foreground"
@@ -304,8 +310,7 @@ const SettleView = ({ refreshKey, onRefresh }: SettleViewProps) => {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (!canApply) return;
-                                const amount = Math.min(remaining, parsedPayment);
-                                handlePartialPayment(expense.id, amount);
+                                handlePartialPayment(friend.id, Math.min(balance, parsedPayment));
                               }}
                               className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50"
                             >
@@ -314,12 +319,12 @@ const SettleView = ({ refreshKey, onRefresh }: SettleViewProps) => {
                           </div>
                           {isOverpay && (
                             <p className="text-xs text-warning px-1">
-                              Amount cannot exceed {formatCurrency(remaining)}
+                              Amount cannot exceed {formatCurrency(balance)}
                             </p>
                           )}
-                        </div>
+                        </>
                       );
-                    })}
+                    })()}
                     
                     {/* Settle All for Friend */}
                     <motion.button

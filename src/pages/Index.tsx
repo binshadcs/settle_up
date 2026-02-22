@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import BottomNav from '@/components/BottomNav';
 import QuickAddDrawer from '@/components/QuickAddDrawer';
@@ -17,6 +17,12 @@ const Index = () => {
   const triggerRefresh = useCallback(() => {
     setRefreshKey(prev => prev + 1);
   }, []);
+
+  useEffect(() => {
+    const onHydrated = () => triggerRefresh();
+    window.addEventListener('settleup:data-hydrated', onHydrated);
+    return () => window.removeEventListener('settleup:data-hydrated', onHydrated);
+  }, [triggerRefresh]);
 
   const pageVariants = {
     initial: { opacity: 0, y: 10 },
