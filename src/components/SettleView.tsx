@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, CheckCircle2, Sparkles } from 'lucide-react';
+import { Check, CheckCircle2, Plus } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { 
   Friend,
@@ -20,6 +20,7 @@ import SuccessAnimation from './SuccessAnimation';
 interface SettleViewProps {
   refreshKey: number;
   onRefresh: () => void;
+  onAddExpense: () => void;
 }
 
 interface FriendWithPending {
@@ -28,7 +29,7 @@ interface FriendWithPending {
   expenses: Expense[];
 }
 
-const SettleView = ({ refreshKey, onRefresh }: SettleViewProps) => {
+const SettleView = ({ refreshKey, onRefresh, onAddExpense }: SettleViewProps) => {
   const [friendsWithPending, setFriendsWithPending] = useState<FriendWithPending[]>([]);
   const [totalPending, setTotalPending] = useState(0);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -164,20 +165,25 @@ const SettleView = ({ refreshKey, onRefresh }: SettleViewProps) => {
       {totalPending === 0 && (
         <motion.div
           variants={itemVariants}
-          className="text-center py-16"
+          className="card-elevated p-6"
         >
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
-            className="w-20 h-20 mx-auto mb-6 rounded-full bg-success/10 flex items-center justify-center"
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-secondary/70 border border-border flex items-center justify-center text-2xl shrink-0">
+              🍃
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-foreground">You’re all caught up</h3>
+              <p className="text-sm text-muted-foreground mt-1">No dues pending right now. Add a new expense when needed.</p>
+            </div>
+          </div>
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={onAddExpense}
+            className="btn-primary w-full h-11 mt-4 flex items-center justify-center gap-2"
           >
-            <Sparkles className="w-10 h-10 text-success" />
-          </motion.div>
-          <h3 className="text-xl font-bold text-foreground mb-2">All Clear!</h3>
-          <p className="text-muted-foreground">
-            You have no pending payments. Great job! 🎉
-          </p>
+            <Plus className="w-4 h-4" />
+            Add Expense
+          </motion.button>
         </motion.div>
       )}
 

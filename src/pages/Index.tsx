@@ -70,7 +70,11 @@ const Index = () => {
               exit="exit"
               transition={{ duration: 0.2 }}
             >
-              <SettleView refreshKey={refreshKey} onRefresh={triggerRefresh} />
+              <SettleView
+                refreshKey={refreshKey}
+                onRefresh={triggerRefresh}
+                onAddExpense={() => setIsAddDrawerOpen(true)}
+              />
             </motion.div>
           )}
 
