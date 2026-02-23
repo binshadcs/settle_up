@@ -12,6 +12,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      injectRegister: "auto",
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "settle_up_logo.png"],
       manifest: {
